@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -114,7 +116,7 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
   /// @notice Change the standard max wallet
   /// @param newMaxWallet The new cooldown in seconds
   function setMaxWallet(uint256 newMaxWallet) external onlyOwner {
-    uint256 _oldValue = maxWallet;
+    //uint256 _oldValue = maxWallet;
     maxWallet = newMaxWallet;
     //emit SetMaxWallet(_oldValue, newMaxWallet);
   }
@@ -122,7 +124,7 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
   /// @notice Change the minimum contract ruffle balance before `_swap` gets invoked
   /// @param _minTokenBalance The new minimum balance
   function setMinimumTokenBalance(uint256 _minTokenBalance) external onlyOwner {
-    uint256 _oldValue = minTokenBalance;
+    //uint256 _oldValue = minTokenBalance;
     minTokenBalance = _minTokenBalance;
     //emit SetMinTokenBalance(_oldValue, _minTokenBalance);
   }
@@ -149,10 +151,7 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     uint256 acap;
     uint256 apad;
     uint256 buyTax;
-    (send, buyTax, marketing, lottery, acap, apad) = _getBuyTaxInfo(
-      amount,
-      recipient
-    );
+    (send, buyTax, marketing, lottery, acap, apad) = _getBuyTaxInfo(amount);
     if (buyWinnersActive && amount >= minimumBuyToWin && !buyLotteryRunning) {
       _addToBuyLottery(recipient, amount);
     }
@@ -166,13 +165,16 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
       biggestBuyer = recipient;
       biggestBuy = amount;
     }
+    //hier zit nog fout
     if (amount > nftMinBuy) {
       uint256 nftBalanceUser = ruffleNft.balanceOf(recipient);
       if (nftBalanceUser != 0) {
         uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(recipient, 0);
         uint256 freeTokens = ruffleNft.getFreeTokens(tokenId);
         //beter to mint from liquidity
-        _rawTransfer(address(this), recipient, freeTokens);
+        if (freeTokens < balanceOf(address(this))) {
+          _rawTransfer(address(this), recipient, freeTokens);
+        }
       }
     }
     _rawTransfer(sender, recipient, send);
@@ -242,6 +244,17 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     } */
     _rawTransfer(sender, recipient, send);
     _takeTaxes(sender, marketing, lottery, acap, apad);
+    if (totalTax != 0) {
+      uint256 nftBalanceUser = ruffleNft.balanceOf(sender);
+      if (nftBalanceUser != 0) {
+        uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(sender, 0);
+        uint256 reducer = _getReducedTax(tokenId);
+        if (reducer != 0) {
+          uint256 refund = amount.mul(reducer).div(100);
+          _rawTransfer(sender, recipient, refund);
+        }
+      }
+    }
   }
 
   /// @notice Returns a bool if the sell winner is triggered

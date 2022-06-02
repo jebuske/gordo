@@ -252,14 +252,13 @@ contract AdvancedTax is Ownable, NFTLogic {
 
   /// @notice Get a breakdown of send and tax amounts
   /// @param amount The amount to tax in wei
-  /// @param user the address for which to generate a random number
   /// @return send The raw amount to send
   /// @return buyTax the tax percentage that the user pays on buy
   /// @return marketing The raw marketing tax amount
   /// @return lottery The raw lottery tax amount
   /// @return acap the raw acap tax amount
   /// @return apad the raw apad tax amount
-  function _getBuyTaxInfo(uint256 amount, address user)
+  function _getBuyTaxInfo(uint256 amount)
     internal
     view
     returns (
@@ -271,7 +270,7 @@ contract AdvancedTax is Ownable, NFTLogic {
       uint256 apad
     )
   {
-    uint256 _baseBuyTax = _getBuyTaxPercentage(amount, user);
+    uint256 _baseBuyTax = minimumBuyTax;
     uint256 _multiplier = _getBuyTaxTier(amount);
     buyTax = _baseBuyTax.mul(_multiplier).div(10);
     uint256 _sendRate = 100 - (buyTax);
@@ -287,13 +286,13 @@ contract AdvancedTax is Ownable, NFTLogic {
   /// @param amount The amount that is being seend
   /// @param user the address for which to generate a random number
   /// @return buyTaxPercentage
-  function _getBuyTaxPercentage(uint256 amount, address user)
+  /* function _getBuyTaxPercentage(uint256 amount, address user)
     internal
     view
     returns (uint256 buyTaxPercentage)
   {
     return minimumBuyTax;
-  }
+  } */
 
   /// @notice get the tier for the buy tax based on the amount of tokens bought
   /// @param amount the amount of tokens bought
@@ -340,20 +339,25 @@ contract AdvancedTax is Ownable, NFTLogic {
     if (nftBalanceUser != 0) {
       uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(user, 0);
       bool freeSellPass = ruffleNft.getFreeSell(tokenId);
-      uint256 taxReducer = ruffleNft.getTaxReducer(tokenId);
       if (freeSellPass) {
         _sendRate = 100;
-      } else {
-        _sendRate = _sendRate.add(taxReducer);
       }
     }
-
     send = amount.mul(_sendRate).div(100);
     totalTax = amount.sub(send);
     marketing = totalTax.mul(sellMarketingRate).div(100);
     lottery = totalTax.mul(sellLotteryRate).div(100);
     acap = totalTax.mul(sellAcapRate).div(100);
     apad = totalTax.mul(sellApadRate).div(100);
+  }
+
+  /// @notice get the tier for the sell tax based on the amount of tokens bought
+  /// @param tokenId the amount of tokens bought
+  /// @return taxTier the multiplier that corresponds to the tax tier
+
+  function _getReducedTax(uint256 tokenId) internal view returns (uint256) {
+    uint256 reducer = ruffleNft.getTaxReducer(tokenId);
+    return reducer;
   }
 
   /// @notice get the tier for the sell tax based on the amount of tokens bought
@@ -373,12 +377,11 @@ contract AdvancedTax is Ownable, NFTLogic {
   }
 
   /// @notice Get a breakdown of send and tax amounts
-  /// @param amount the amount that is being send. Will be used to generate a more difficult pseudo random number
-  /// @param user the address for which to generate a random number
+
   /// @return sellTaxPercentage
-  function _getSellTaxPercentage(uint256 amount, address user)
+  function _getSellTaxPercentage()
     internal
-    view
+    pure
     returns (uint256 sellTaxPercentage)
   {
     return sellTaxPercentage;

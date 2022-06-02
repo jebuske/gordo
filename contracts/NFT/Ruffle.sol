@@ -167,3 +167,4 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     return super.supportsInterface(interfaceId);
   }
 }
+//https://rinkeby.etherscan.io/address/0xc14ab28ed0e626ee0558ee7dfb81d3fe879e5788#code

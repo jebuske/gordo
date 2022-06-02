@@ -137,7 +137,7 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
     if (freeBigSellChance) {
       bigSellParticipants += 1;
       _addToBigSellLottery(msg.sender, bigSellToWin.div(5));
-      //ruffleNft.burn(_tokenId);
+      ruffleNft.burn(_tokenId);
       //ruffleNft.burn(_tokenId);
     }
   }
@@ -238,7 +238,7 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
   /// @notice Change the minimum buy size to be elgible to win
   /// @param _minimumBuyToWin The new cooldown in seconds
   function setMinimumBuyToWin(uint256 _minimumBuyToWin) external onlyOwner {
-    uint256 _oldMinBuy = minimumBuyToWin;
+    //uint256 _oldMinBuy = minimumBuyToWin;
     minimumBuyToWin = _minimumBuyToWin;
     //emit logSetMinBuyToWin(_oldMinBuy, _minimumBuyToWin);
   }
@@ -254,7 +254,7 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
       _chanceToWinLastBuy <= 500,
       "_chanceToWinLastBuy must be less than or equal to 500"
     );
-    uint256 _oldChanceToWin = chanceToWinLastBuy;
+    //uint256 _oldChanceToWin = chanceToWinLastBuy;
     chanceToWinLastBuy = _chanceToWinLastBuy;
     //emit logSetChanceToWinLastBuy(_oldChanceToWin, _chanceToWinLastBuy);
   }
