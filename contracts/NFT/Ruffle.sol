@@ -5,18 +5,27 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "./INFT721.sol";
+import "../TOKEN/ILottery.sol";
+import "../TOKEN/IRuffle.sol";
 
 contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
+  using Counters for Counters.Counter;
+  Counters.Counter private _tokenIds;
   uint256 MAX_MINTS = 1;
   uint256 MAX_SUPPLY = 500;
   uint256 public mintRate = 0.0069 ether;
   mapping(address => bool) hasMinted;
+  address public lotteryAddress;
+  IRuffle public ruffleToken;
 
   struct NFTProperties {
     uint256 lotteryMultiplier;
     uint256 onBuyMultiplier;
-    uint256 buyAmountMultiplier;
+    uint256 freeTokens;
     uint256 taxReducer;
     bool bigSellEntry;
     bool freeSell;
@@ -27,7 +36,7 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
   string public baseURI =
     "ipfs://bafybeieyetlp2c2vubffzjjap7utuz5jwo2k5b5kupvezfchc5tnfg4fh4/";
 
-  constructor() public ERC721("Ruffles", "RUFFLEs") {}
+  constructor() ERC721("Ruffles", "RUFFLEs") {}
 
   /// @notice a function to update onchain properties
   /// @dev -mint function protected by total supply
@@ -35,9 +44,10 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     uint256[] memory tokenIds,
     uint256[] memory lotteryMultipliers,
     uint256[] memory onBuyMultipliers,
-    uint256[] memory buyAmountMultipliers,
+    uint256[] memory freeTokens,
     uint256[] memory taxReducers,
-    bool[] memory bigSellEntries
+    bool[] memory bigSellEntries,
+    bool[] memory freeSells
   ) external onlyOwner {
     require(
       tokenIds.length == lotteryMultipliers.length,
@@ -47,10 +57,7 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
       tokenIds.length == onBuyMultipliers.length,
       "array lengths must match"
     );
-    require(
-      tokenIds.length == buyAmountMultipliers.length,
-      "array lengths must match"
-    );
+    require(tokenIds.length == freeTokens.length, "array lengths must match");
     require(tokenIds.length == taxReducers.length, "array lengths must match");
     require(
       tokenIds.length == bigSellEntries.length,
@@ -61,9 +68,10 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
       nftIdProperties[tokenIds[i]] = NFTProperties(
         lotteryMultipliers[i],
         onBuyMultipliers[i],
-        buyAmountMultipliers[i],
+        freeTokens[i],
         taxReducers[i],
-        bigSellEntries[i]
+        bigSellEntries[i],
+        freeSells[i]
       );
     }
   }
@@ -72,11 +80,13 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     require(hasMinted[msg.sender] == false);
     require(totalSupply() + 1 <= MAX_SUPPLY, "Not enough tokens left");
     require(msg.value >= (mintRate), "Not enough ether sent");
-    _safeMint(msg.sender, 1);
+    _tokenIds.increment();
+    uint256 newItemId = _tokenIds.current();
+    _safeMint(msg.sender, newItemId);
     hasMinted[msg.sender] = true;
   }
 
-  function claim() external {
+  function claimLongStaker() external {
     uint256 timeStaked = ILottery(lotteryAddress).getTimeStaked(msg.sender);
     require(
       timeStaked > 100000,
@@ -84,6 +94,22 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     );
     require(totalSupply() + 1 <= MAX_SUPPLY, "Not enough tokens left");
     _safeMint(msg.sender, 1);
+  }
+
+  function claimBiggestBuyer() external {
+    bool isBiggestBuyer = ruffleToken.getIsBiggestBuyer(msg.sender);
+    if (isBiggestBuyer) _safeMint(msg.sender, 1);
+  }
+
+  /// @notice a function to set the address of the ruffle token
+  /// @param ruffleAddress is the address of the ruffle token
+  function setRuffleInuToken(IRuffle ruffleAddress) external onlyOwner {
+    ruffleToken = IRuffle(ruffleAddress);
+    //emit SetRuffleInuToken(ruffleAddress);
+  }
+
+  function setLotteryAddress(address _lotteryAddress) external onlyOwner {
+    lotteryAddress = _lotteryAddress;
   }
 
   function withdraw() external payable onlyOwner {
@@ -106,8 +132,8 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     return nftIdProperties[n].onBuyMultiplier;
   }
 
-  function getBuyAmountMultiplier(uint256 n) public view returns (uint256) {
-    return nftIdProperties[n].buyAmountMultiplier;
+  function getFreeTokens(uint256 n) public view returns (uint256) {
+    return nftIdProperties[n].freeTokens;
   }
 
   function getTaxReducer(uint256 n) public view returns (uint256) {

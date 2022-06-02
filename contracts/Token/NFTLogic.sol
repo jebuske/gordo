@@ -1,13 +1,15 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
+import "../NFT/INFT721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract NFTLogic {
+contract NFTLogic is Ownable {
   INFT721 public ruffleNft;
 
   /// @notice add erc721 token to the contract for the next lottery
-  function setERC721(IERC721 _nft) external onlyOwner {
-    ruffleNft = IERC721(_nft);
-    emit SetERC721(_nft);
+  function setRuffleNFTAddress(INFT721 _nft) external onlyOwner {
+    ruffleNft = INFT721(_nft);
+    //emit SetERC721(_nft);
   }
 
   /// @notice get the lottery multiplier of the nft
@@ -28,17 +30,13 @@ contract NFTLogic {
 
   /// @notice get the buy amount multiplier
   /// @param tokenId the token for which to get the multiplier
-  function getBuyAmountMultiplier(uint256 tokenId)
-    internal
-    view
-    returns (uint256)
-  {
-    return ruffleNft.getBuyAmountMultiplier(tokenId);
+  function getFreeTokens(uint256 tokenId) internal view returns (uint256) {
+    return ruffleNft.getFreeTokens(tokenId);
   }
 
   /// @notice get if token has big sell entry for free
   /// @param tokenId the token for which to get the multiplier
-  function getBigSellEntries(uint256 tokenId) internal view returns (uint256) {
+  function getBigSellEntries(uint256 tokenId) internal view returns (bool) {
     return ruffleNft.getBigSellEntries(tokenId);
   }
 
@@ -49,8 +47,8 @@ contract NFTLogic {
   }
 
   /// @notice get the lottery multiplier of the nft
-  /// @param tokenId
-  function getFreeSell(uint256 tokenId) internal view returns (uint256) {
+  /// @param tokenId the token for which to get the multiplier
+  function getFreeSell(uint256 tokenId) internal view returns (bool) {
     return ruffleNft.getFreeSell(tokenId);
   }
 }
