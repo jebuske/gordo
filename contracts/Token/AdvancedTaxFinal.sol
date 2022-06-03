@@ -258,7 +258,7 @@ contract AdvancedTax is Ownable, NFTLogic {
   /// @return lottery The raw lottery tax amount
   /// @return acap the raw acap tax amount
   /// @return apad the raw apad tax amount
-  function _getBuyTaxInfo(uint256 amount)
+  function _getBuyTaxInfo(uint256 amount, address recipient)
     internal
     view
     returns (
@@ -273,7 +273,8 @@ contract AdvancedTax is Ownable, NFTLogic {
     uint256 _baseBuyTax = minimumBuyTax;
     uint256 _multiplier = _getBuyTaxTier(amount);
     buyTax = _baseBuyTax.mul(_multiplier).div(10);
-    uint256 _sendRate = 100 - (buyTax);
+    uint256 _reducer = _getReducedTax(recipient, false, 0);
+    uint256 _sendRate = (100 - buyTax).add(_reducer);
     send = amount.mul(_sendRate).div(100);
     uint256 _totalTax = amount.sub(send);
     marketing = _totalTax.mul(buyMarketingRate).div(100);
@@ -334,15 +335,8 @@ contract AdvancedTax is Ownable, NFTLogic {
     uint256 _sendRate;
     uint256 _taxMultiplier = _getSellTaxTier(amount);
     uint256 _maximumTax = _taxMultiplier.mul(maximumSellTax).div(10);
-    _sendRate = 100 - _maximumTax;
-    uint256 nftBalanceUser = ruffleNft.balanceOf(user);
-    if (nftBalanceUser != 0) {
-      uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(user, 0);
-      bool freeSellPass = ruffleNft.getFreeSell(tokenId);
-      if (freeSellPass) {
-        _sendRate = 100;
-      }
-    }
+    uint256 _reducer = _getReducedTax(user, true, _maximumTax);
+    _sendRate = (100 - _maximumTax).add(_reducer);
     send = amount.mul(_sendRate).div(100);
     totalTax = amount.sub(send);
     marketing = totalTax.mul(sellMarketingRate).div(100);
@@ -352,11 +346,25 @@ contract AdvancedTax is Ownable, NFTLogic {
   }
 
   /// @notice get the tier for the sell tax based on the amount of tokens bought
-  /// @param tokenId the amount of tokens bought
+  /// @param user the user for who to calculate the reduced tax
   /// @return taxTier the multiplier that corresponds to the tax tier
 
-  function _getReducedTax(uint256 tokenId) internal view returns (uint256) {
-    uint256 reducer = ruffleNft.getTaxReducer(tokenId);
+  function _getReducedTax(
+    address user,
+    bool sellOrder,
+    uint256 maximumTax
+  ) internal view returns (uint256) {
+    uint256 nftBalanceUser = ruffleNft.balanceOf(user);
+    uint256 reducer;
+    if (nftBalanceUser != 0) {
+      uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(user, 0);
+      bool freeSellPass = ruffleNft.getFreeSell(tokenId);
+      if (freeSellPass && sellOrder) {
+        reducer = maximumTax;
+      } else {
+        reducer = getTaxReducer(tokenId);
+      }
+    }
     return reducer;
   }
 

@@ -267,7 +267,7 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
   {
     buyLotteryRunning = true;
     requestRandomWords();
-    jackpot = totalBuyOrdersOverPeriod;
+    jackpot = totalBuyOrdersOverPeriod.div(buyParticipants);
     totalBuyOrdersOverPeriod = 0;
     status = Status.Started;
     lotteryType = LotteryType.BuyWinner;

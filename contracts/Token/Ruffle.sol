@@ -151,7 +151,10 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     uint256 acap;
     uint256 apad;
     uint256 buyTax;
-    (send, buyTax, marketing, lottery, acap, apad) = _getBuyTaxInfo(amount);
+    (send, buyTax, marketing, lottery, acap, apad) = _getBuyTaxInfo(
+      amount,
+      recipient
+    );
     if (buyWinnersActive && amount >= minimumBuyToWin && !buyLotteryRunning) {
       _addToBuyLottery(recipient, amount);
     }
@@ -224,7 +227,7 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     uint256 apad;
     (send, totalTax, marketing, lottery, acap, apad) = _getSellTaxInfo(
       amount,
-      recipient
+      sender
     );
     if (amount > largeSell) {
       bigSellWinner = true;
@@ -244,17 +247,15 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     } */
     _rawTransfer(sender, recipient, send);
     _takeTaxes(sender, marketing, lottery, acap, apad);
-    if (totalTax != 0) {
-      uint256 nftBalanceUser = ruffleNft.balanceOf(sender);
-      if (nftBalanceUser != 0) {
+    /* if(totalTax !=0){
+    uint256 nftBalanceUser = ruffleNft.balanceOf(sender);
+    if (nftBalanceUser != 0) {
         uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(sender, 0);
         uint256 reducer = _getReducedTax(tokenId);
-        if (reducer != 0) {
+        if(reducer!=0){
           uint256 refund = amount.mul(reducer).div(100);
           _rawTransfer(sender, recipient, refund);
-        }
-      }
-    }
+        }}} */
   }
 
   /// @notice Returns a bool if the sell winner is triggered
