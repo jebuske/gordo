@@ -12,13 +12,9 @@ contract AdvancedTax is Ownable, NFTLogic {
   uint256 _totalSupply;
   //Tax distribution between marketing and lottery. Tax percentage is variable on buy and sell
   uint256 public buyMarketingRate = 20;
-  uint256 public buyLotteryRate = 60;
-  uint256 public buyAcapRate = 8;
-  uint256 public buyApadRate = 12;
-  uint256 public sellMarketingRate = 30;
-  uint256 public sellLotteryRate = 50;
-  uint256 public sellAcapRate = 4;
-  uint256 public sellApadRate = 16;
+  uint256 public buyLotteryRate = 80;
+  uint256 public sellMarketingRate = 20;
+  uint256 public sellLotteryRate = 80;
   uint256 public minimumBuyTax = 12;
   uint256 public buyTaxRange = 0;
   uint256 public maximumSellTax = 25; //The selltaxrefund will be deducted so that max effective sell tax is never higher than 20 percent
@@ -29,14 +25,10 @@ contract AdvancedTax is Ownable, NFTLogic {
   //Tax balances
   uint256 public totalMarketing;
   uint256 public totalLottery;
-  uint256 public totalApad;
-  uint256 public totalAcap;
 
   //Tax wallets
   address payable public lotteryWallet;
   address payable public marketingWallet;
-  address payable public apadWallet;
-  address payable public acapWallet;
 
   mapping(address => bool) public _taxExcluded;
   mapping(address => uint256) public taxPercentagePaidByUser;
@@ -44,27 +36,20 @@ contract AdvancedTax is Ownable, NFTLogic {
   //event
   event AddTaxExcluded(address wallet);
   event RemoveTaxExcluded(address wallet);
-  event SetBuyRate(
-    uint256 buyMarketingRate,
-    uint256 buyLotteryRate,
-    uint256 buyAcapRate,
-    uint256 buyApadRate
+  event BuyRateChanged(uint256 buyMarketingRate, uint256 buyLotteryRate);
+  event BuyTaxChanged(uint256 minimumBuyTax, uint256 buyTaxRange);
+  event LotteryWalletChanged(
+    address oldLotteryWallet,
+    address newLotteryWallet
   );
-  event SetBuyTax(uint256 minimumBuyTax, uint256 buyTaxRange);
-  event SetLotteryWallet(address oldLotteryWallet, address newLotteryWallet);
-  event SetMarketingWallet(
+  event MarketingWalletChanged(
     address oldMarketingWallet,
     address newMarketingWallet
   );
-  event SetSellRates(
-    uint256 sellMarketingRate,
-    uint256 sellLotteryRate,
-    uint256 sellAcapRate,
-    uint256 sellApadRate
-  );
-  event SetSellTax(uint256 _maximumSellTax, uint256 _maximumSellTaxRefund);
-  event SetTaxTiers(uint256 tier1, uint256 tier2);
-  event SetTieredTaxPercentages(uint256 multiplier1, uint256 multiplier2);
+  event SellRatesChanged(uint256 sellMarketingRate, uint256 sellLotteryRate);
+  event SellTaxChanged(uint256 _maximumSellTax, uint256 _maximumSellTaxRefund);
+  event TaxTiersChanged(uint256 tier1, uint256 tier2);
+  event TieredTaxPercentagesChanged(uint256 multiplier1, uint256 multiplier2);
 
   /// @notice Include an address to paying taxes
   /// @param account The address that we want to start paying taxes
@@ -77,32 +62,17 @@ contract AdvancedTax is Ownable, NFTLogic {
   /// @notice Change distribution of the buy taxes
   /// @param _marketingRate The new marketing tax rate
   /// @param _buyLotteryRate The new lottery tax rate
-  /// @param _buyAcapRate The new acap tax rate
-  /// @param _buyApadRate The new apad tax rate
-  function setBuyRates(
-    uint256 _marketingRate,
-    uint256 _buyLotteryRate,
-    uint256 _buyAcapRate,
-    uint256 _buyApadRate
-  ) external onlyOwner {
+
+  function setBuyRates(uint256 _marketingRate, uint256 _buyLotteryRate)
+    external
+    onlyOwner
+  {
     require(_marketingRate <= 25, "_marketingRate cannot exceed 25%");
     require(_buyLotteryRate <= 100, "_lotteryRate cannot exceed 100%");
-    require(_buyAcapRate <= 20, "_buyAcapRate cannot exceed 20%");
-    require(_buyApadRate <= 20, "_buyApadRate cannot exceed 20%");
-    require(
-      _marketingRate + _buyLotteryRate + _buyAcapRate + _buyApadRate == 100,
-      "the sum must be 100"
-    );
+    require(_marketingRate + _buyLotteryRate == 100, "the sum must be 100");
     buyMarketingRate = _marketingRate;
     buyLotteryRate = _buyLotteryRate;
-    buyAcapRate = _buyAcapRate;
-    buyApadRate = _buyApadRate;
-    emit SetBuyRate(
-      _marketingRate,
-      _buyLotteryRate,
-      _buyAcapRate,
-      _buyApadRate
-    );
+    emit BuyRateChanged(_marketingRate, _buyLotteryRate);
   }
 
   /// @notice Change the buy tax rate variables
@@ -120,7 +90,7 @@ contract AdvancedTax is Ownable, NFTLogic {
     );
     minimumBuyTax = _minimumTax;
     buyTaxRange = _buyTaxRange;
-    emit SetBuyTax(_minimumTax, _buyTaxRange);
+    emit BuyTaxChanged(_minimumTax, _buyTaxRange);
   }
 
   /// @notice Change the address of the lottery wallet
@@ -134,7 +104,7 @@ contract AdvancedTax is Ownable, NFTLogic {
     removeTaxExcluded(_oldLotteryWallet);
     lotteryWallet = _lotteryWallet;
     addTaxExcluded(_lotteryWallet);
-    emit SetLotteryWallet(_oldLotteryWallet, _lotteryWallet);
+    emit LotteryWalletChanged(_oldLotteryWallet, _lotteryWallet);
   }
 
   /// @notice Change the address of the marketing wallet
@@ -151,37 +121,26 @@ contract AdvancedTax is Ownable, NFTLogic {
     removeTaxExcluded(_oldMarketingWallet);
     marketingWallet = _marketingWallet;
     addTaxExcluded(_marketingWallet);
-    emit SetMarketingWallet(_oldMarketingWallet, _marketingWallet);
+    emit MarketingWalletChanged(_oldMarketingWallet, _marketingWallet);
   }
 
   /// @notice Change the marketing and lottery rate on sells
   /// @param _sellMarketingRate The new marketing tax rate
   /// @param _sellLotteryRate The new treasury tax rate
-  function setSellRates(
-    uint256 _sellMarketingRate,
-    uint256 _sellLotteryRate,
-    uint256 _sellAcapRate,
-    uint256 _sellApadRate
-  ) external onlyOwner {
+  function setSellRates(uint256 _sellMarketingRate, uint256 _sellLotteryRate)
+    external
+    onlyOwner
+  {
     require(_sellMarketingRate <= 25, "_marketingRate cannot exceed 25%");
     require(_sellLotteryRate <= 100, "_lotteryRate cannot exceed 100%");
-    require(_sellAcapRate <= 20, "_sellAcapRate cannot exceed 20%");
-    require(_sellApadRate <= 20, "_sellApadRate cannot exceed 20%");
     require(
-      _sellMarketingRate + _sellLotteryRate + _sellAcapRate + _sellApadRate ==
-        100,
+      _sellMarketingRate + _sellLotteryRate == 100,
       "the sum must be 100"
     );
     sellMarketingRate = _sellMarketingRate;
     sellLotteryRate = _sellLotteryRate;
-    sellAcapRate = _sellAcapRate;
-    sellApadRate = _sellApadRate;
-    emit SetSellRates(
-      _sellMarketingRate,
-      _sellLotteryRate,
-      _sellAcapRate,
-      _sellApadRate
-    );
+
+    emit SellRatesChanged(_sellMarketingRate, _sellLotteryRate);
   }
 
   /// @notice Change the sell tax rate variables
@@ -205,6 +164,7 @@ contract AdvancedTax is Ownable, NFTLogic {
     );
     maximumSellTax = _maximumSellTax;
     maximumSellTaxRefund = _maximumSellTaxRefund;
+    emit SellTaxChanged(_maximumSellTax, _maximumSellTaxRefund);
   }
 
   /// @notice Set the three different tax tiers by setting the highest bracket and the lower cutoff. Value multiplied by totalSupply divided by 10000. Example 50 = 5000000 tokens
@@ -212,7 +172,7 @@ contract AdvancedTax is Ownable, NFTLogic {
     require(_taxTiers.length == 2, "you have to give an array with 2 values");
     taxTiers[0] = _taxTiers[0];
     taxTiers[1] = _taxTiers[1];
-    emit SetTaxTiers(_taxTiers[0], _taxTiers[1]);
+    emit TaxTiersChanged(_taxTiers[0], _taxTiers[1]);
   }
 
   /// @notice Set the three different tax tier percentages
@@ -230,6 +190,10 @@ contract AdvancedTax is Ownable, NFTLogic {
     tieredTaxPercentage[0] = _tieredPercentages[0];
     tieredTaxPercentage[1] = _tieredPercentages[1];
     tieredTaxPercentage[2] = _tieredPercentages[2];
+    emit TieredTaxPercentagesChanged(
+      _tieredPercentages[0],
+      _tieredPercentages[2]
+    );
   }
 
   /// @notice Exclude an address from paying taxes
@@ -256,8 +220,6 @@ contract AdvancedTax is Ownable, NFTLogic {
   /// @return buyTax the tax percentage that the user pays on buy
   /// @return marketing The raw marketing tax amount
   /// @return lottery The raw lottery tax amount
-  /// @return acap the raw acap tax amount
-  /// @return apad the raw apad tax amount
   function _getBuyTaxInfo(uint256 amount, address recipient)
     internal
     view
@@ -265,9 +227,7 @@ contract AdvancedTax is Ownable, NFTLogic {
       uint256 send,
       uint256 buyTax,
       uint256 marketing,
-      uint256 lottery,
-      uint256 acap,
-      uint256 apad
+      uint256 lottery
     )
   {
     uint256 _baseBuyTax = minimumBuyTax;
@@ -279,8 +239,6 @@ contract AdvancedTax is Ownable, NFTLogic {
     uint256 _totalTax = amount.sub(send);
     marketing = _totalTax.mul(buyMarketingRate).div(100);
     lottery = _totalTax.mul(buyLotteryRate).div(100);
-    acap = _totalTax.mul(buyAcapRate).div(100);
-    apad = _totalTax.mul(buyApadRate).div(100);
   }
 
   /// @notice Get a breakdown of send and tax amounts
@@ -318,8 +276,6 @@ contract AdvancedTax is Ownable, NFTLogic {
   /// @return totalTax the total taxes on the sell tx
   /// @return marketing The raw marketing tax amount
   /// @return lottery The raw lottery tax amount
-  /// @return acap the raw acap tax amount
-  /// @return apad the raw apad tax amount
   function _getSellTaxInfo(uint256 amount, address user)
     internal
     view
@@ -327,9 +283,7 @@ contract AdvancedTax is Ownable, NFTLogic {
       uint256 send,
       uint256 totalTax,
       uint256 marketing,
-      uint256 lottery,
-      uint256 acap,
-      uint256 apad
+      uint256 lottery
     )
   {
     uint256 _sendRate;
@@ -341,8 +295,6 @@ contract AdvancedTax is Ownable, NFTLogic {
     totalTax = amount.sub(send);
     marketing = totalTax.mul(sellMarketingRate).div(100);
     lottery = totalTax.mul(sellLotteryRate).div(100);
-    acap = totalTax.mul(sellAcapRate).div(100);
-    apad = totalTax.mul(sellApadRate).div(100);
   }
 
   /// @notice get the tier for the sell tax based on the amount of tokens bought

@@ -29,6 +29,7 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     uint256 taxReducer;
     bool bigSellEntry;
     bool freeSell;
+    uint256 burnEntries;
   }
 
   mapping(uint256 => NFTProperties) nftIdProperties;
@@ -47,7 +48,8 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     uint256[] memory freeTokens,
     uint256[] memory taxReducers,
     bool[] memory bigSellEntries,
-    bool[] memory freeSells
+    bool[] memory freeSells,
+    uint256[] memory burnEntries
   ) external onlyOwner {
     require(
       tokenIds.length == lotteryMultipliers.length,
@@ -71,7 +73,8 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
         freeTokens[i],
         taxReducers[i],
         bigSellEntries[i],
-        freeSells[i]
+        freeSells[i],
+        burnEntries[i]
       );
     }
   }
@@ -146,6 +149,10 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
 
   function getFreeSell(uint256 n) public view returns (bool) {
     return nftIdProperties[n].freeSell;
+  }
+
+  function getBurnEntries(uint256 n) public view returns (uint256) {
+    return nftIdProperties[n].burnEntries;
   }
 
   // The following functions are overrides required by Solidity.

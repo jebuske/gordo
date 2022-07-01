@@ -22,8 +22,12 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
   uint256 internal _secretNumber;
   uint256 public biggestBuy;
   uint256 public bigSellParticipants;
+  uint256 public bigSellParticipantsToStart = 10;
   uint256 public bigSellToWin;
+  uint256 public bigSellDivider = 4;
+  uint256 public jackpotDivider;
   uint256 public buyParticipants;
+  uint256 public buyParticipantsToStar = 25;
   uint256 public chanceBuyLottery;
   uint256 public chanceToWinLastBuy;
   uint256 public chanceSellWinner;
@@ -32,6 +36,7 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
   uint256 public lastAmountWon;
   uint256 public lastTimeStamp;
   uint256 public constant MAX_TREE_LEAVES = 5;
+  uint256 public minBuyLargeSell;
   uint256 public minimumBuyToWin = 500_000 ether;
   uint256 public nftMinBuy = 1_000_000 ether;
   uint256 public totalBuyOrdersOverPeriod;
@@ -77,6 +82,23 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
   uint256 public s_requestId;
   address s_owner;
 
+  event AddWhitelistedService(address service);
+  event BiggestBuyerAdded(address biggestBuyer);
+  event BigSellNFTEntered(address entrant, uint256 token);
+  event AddedToBuyLottery(address user, uint256 chance);
+  event AddedToBigSellLottery(address user, uint256 chance);
+  event BuyWinnersActiveChanged(bool newValue);
+  event BigSellPartToStartChanged(uint256 oldValue, uint256 newValue);
+  event BuyPartToStartChanged(uint256 oldValue, uint256 newValue);
+  event NFTWinnersActiveChanged(bool newValue);
+  event LargeSellChanged(uint256 oldValue, uint256 newValue);
+  event BigSellDividerChanged(uint256 oldValue, uint256 newValue);
+  event JackpotDividerChanged(uint256 oldValue, uint256 newValue);
+  event MinBuyToWinChanged(uint256 oldValue, uint256 newValue);
+  event ChanceToWinLastBuyChanged(uint256 oldChance, uint256 newChance);
+  event BuyLotteryStarted(uint256 jackpot);
+  event BigSellLotteryStarted(uint256 jackpot);
+
   constructor(uint64 subscriptionId) VRFConsumerBaseV2(vrfCoordinator) {
     COORDINATOR = VRFCoordinatorV2Interface(vrfCoordinator);
     LINKTOKEN = LinkTokenInterface(link);
@@ -114,7 +136,7 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
       "TaskTreasury: addWhitelistedService: whitelisted"
     );
     _whitelistedServices[_service] = true;
-    //emit AddWhitelistedService(_service);
+    emit AddWhitelistedService(_service);
   }
 
   /// @notice Writes the biggest buyer to an array of biggest buy winners
@@ -123,22 +145,31 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
     bigBuyers.push(biggestBuyer);
     isBiggestBuyer[biggestBuyer] = true;
     lastTimeStamp = block.timestamp;
+    emit BiggestBuyerAdded(biggestBuyer);
     biggestBuyer = address(0);
     biggestBuy = 0;
   }
 
+  //Change to value instead of BOOL??
   /// @notice Add your NFT with free Big Sell Entry to the contract to participate in the lottery
   /// @param _tokenId The nftId you want to add
   function addBigSellNft(uint256 _tokenId) external {
+    require(nftWinnersActive);
     require(ruffleNft.ownerOf(_tokenId) == msg.sender);
     require(bigSellWinner, "big sell winner not activated");
-    require(bigSellParticipants < 20, "already 20 participants");
+    require(
+      bigSellParticipants < bigSellParticipantsToStart,
+      "already maximum participants"
+    );
     bool freeBigSellChance = ruffleNft.getBigSellEntries(_tokenId);
     if (freeBigSellChance) {
       bigSellParticipants += 1;
-      _addToBigSellLottery(msg.sender, bigSellToWin.div(5));
+      _addToBigSellLottery(msg.sender, bigSellToWin.div(bigSellDivider));
       ruffleNft.burn(_tokenId);
-      //ruffleNft.burn(_tokenId);
+      emit BigSellNFTEntered(msg.sender, _tokenId);
+    }
+    if (bigSellParticipants == bigSellParticipantsToStart) {
+      startBigSellLottery();
     }
   }
 
@@ -169,9 +200,12 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
         chanceBuyLottery,
         bytes32(uint256(uint160(address(user))))
       );
-
       buyParticipants += 1;
       totalBuyOrdersOverPeriod += amount;
+      emit AddedToBuyLottery(user, chanceBuyLottery);
+    }
+    if (buyParticipants == buyParticipantsToStart) {
+      startBuyLottery();
     }
   }
 
@@ -188,7 +222,11 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
         amount,
         bytes32(uint256(uint160(address(user))))
       );
+      emit AddedToBigSellLottery(user, amount);
       bigSellParticipants += 1;
+    }
+    if (bigSellParticipants == bigSellParticipantsToStart) {
+      startBigSellLottery();
     }
   }
 
@@ -214,7 +252,29 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
       "New value is the same as current value"
     );
     buyWinnersActive = _buyWinnersActive;
-    //emit logSetBuyWinnersActive(_buyWinnersActive);
+    emit BuyWinnersActiveChanged(_buyWinnersActive);
+  }
+
+  function setBigSellParticipantsToStart(uint256 _bigSellParticipantsToStart)
+    external
+    onlyOwner
+  {
+    require(_bigSellParticipantsToStart < 40);
+    require(0 < _bigSellParticipantsToStart);
+    uint256 oldValue = bigSellParticipantsToStart;
+    bigSellParticipantsToStart = _bigSellParticipantsToStart;
+    emit BigSellPartToStartChanged(oldValue, bigSellParticipantsToStart);
+  }
+
+  function setBuyParticipantsToStart(uint256 _buyParticipantsToStart)
+    external
+    onlyOwner
+  {
+    require(_buyParticipantsToStart < 40);
+    require(0 < _buyParticipantsToStart);
+    uint256 oldValue = buyParticipantsToStart;
+    buyParticipantsToStart = _buyParticipantsToStart;
+    emit BuyPartToStartChanged(oldValue, buyParticipantsToStart);
   }
 
   /// @notice Enables the possibility to win on buy
@@ -224,23 +284,44 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
       "New value is the same as current value"
     );
     nftWinnersActive = _nftWinnersActive;
-    //emit logSetNFTWinnersActive(_nftWinnersActive);
+    emit NFTWinnersActiveChanged(_nftWinnersActive);
   }
 
   /// @notice sets the large sell amount
   function setLargeSell(uint256 newLargeSell) external onlyOwner {
     //increase this value before final deployment
     require(newLargeSell > 10000000000000000000000);
+    uint256 oldLargeSell = largeSell;
     largeSell = newLargeSell;
-    //emit logSetNFTWinnersActive(_nftWinnersActive);
+    emit LargeSellChanged(oldLargeSell, newLargeSell);
+  }
+
+  /// @notice sets the large sell amount
+  function setBigSellDivider(uint256 newDivider) external onlyOwner {
+    //increase this value before final deployment
+    require(newDivider > 1);
+    require(newDivider < 10);
+    uint256 oldDivider = bigSellDivider;
+    bigSellDivider = newDivider;
+    emit BigSellDividerChanged(oldDivider, newDivider);
+  }
+
+  /// @notice sets the large sell amount
+  function setJackpotDivider(uint256 newDivider) external onlyOwner {
+    //increase this value before final deployment
+    require(newDivider >= 1);
+    require(newDivider < 10);
+    uint256 oldDivider = jackpotDivider;
+    jackpotDivider = newDivider;
+    emit JackpotDividerChanged(oldDivider, newDivider);
   }
 
   /// @notice Change the minimum buy size to be elgible to win
   /// @param _minimumBuyToWin The new cooldown in seconds
   function setMinimumBuyToWin(uint256 _minimumBuyToWin) external onlyOwner {
-    //uint256 _oldMinBuy = minimumBuyToWin;
+    uint256 _oldMinBuy = minimumBuyToWin;
     minimumBuyToWin = _minimumBuyToWin;
-    //emit logSetMinBuyToWin(_oldMinBuy, _minimumBuyToWin);
+    emit MinBuyToWinChanged(_oldMinBuy, _minimumBuyToWin);
   }
 
   /// @notice Change the chance to win the amount of the last buy order (1/Chance)
@@ -254,39 +335,31 @@ contract BuyLogic is Ownable, NFTLogic, VRFConsumerBaseV2 {
       _chanceToWinLastBuy <= 500,
       "_chanceToWinLastBuy must be less than or equal to 500"
     );
-    //uint256 _oldChanceToWin = chanceToWinLastBuy;
+    uint256 _oldChanceToWin = chanceToWinLastBuy;
     chanceToWinLastBuy = _chanceToWinLastBuy;
-    //emit logSetChanceToWinLastBuy(_oldChanceToWin, _chanceToWinLastBuy);
+    emit ChanceToWinLastBuyChanged(_oldChanceToWin, _chanceToWinLastBuy);
   }
 
   /// @notice Start a new lottery
-  function startBuyLottery()
-    external
-    onlyWhitelistedServices
-    lotteryNotStarted
-  {
+  function startBuyLottery() internal lotteryNotStarted {
     buyLotteryRunning = true;
     requestRandomWords();
-    jackpot = totalBuyOrdersOverPeriod.div(buyParticipants);
+    jackpot = (totalBuyOrdersOverPeriod.div(buyParticipants)).div(5); //20% of all taxes collected over the buy orders go to the lottery
     totalBuyOrdersOverPeriod = 0;
     status = Status.Started;
     lotteryType = LotteryType.BuyWinner;
-    //emit BuyLotteryStarted(jackpot);
+    emit BuyLotteryStarted(jackpot);
   }
 
   /// @notice Start a new lottery
-  function startBigSellLottery()
-    external
-    onlyWhitelistedServices
-    lotteryNotStarted
-  {
+  function startBigSellLottery() internal lotteryNotStarted {
     bigSellLotteryRunning = true;
     requestRandomWords();
-    jackpot = bigSellToWin;
+    jackpot = bigSellToWin.div(jackpotDivider);
     bigSellToWin = 0;
     status = Status.Started;
     lotteryType = LotteryType.BigSell;
-    //emit BigSellLotteryStarted(jackpot);
+    emit BigSellLotteryStarted(jackpot);
   }
 
   /// @notice fulfill the randomwords from chainlink

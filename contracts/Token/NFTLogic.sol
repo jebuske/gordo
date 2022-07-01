@@ -40,15 +40,21 @@ contract NFTLogic is Ownable {
     return ruffleNft.getBigSellEntries(tokenId);
   }
 
-  /// @notice get if token gives you right to do a free sell
+  /// @notice fetch if the nft gives a tax reducer
   /// @param tokenId the token for which to get the multiplier
   function getTaxReducer(uint256 tokenId) internal view returns (uint256) {
     return ruffleNft.getTaxReducer(tokenId);
   }
 
-  /// @notice get the lottery multiplier of the nft
-  /// @param tokenId the token for which to get the multiplier
+  /// @notice fetch if you get a free sell by holding the nft
+  /// @param tokenId the token for which to get the free sell
   function getFreeSell(uint256 tokenId) internal view returns (bool) {
     return ruffleNft.getFreeSell(tokenId);
+  }
+
+  ///@notice get the burn lottery entries of the nft
+  /// @param tokenId the token for which to get the burn entries
+  function getBurnEntries(uint256 tokenId) internal view returns (uint256) {
+    return ruffleNft.getBurnEntries(tokenId);
   }
 }

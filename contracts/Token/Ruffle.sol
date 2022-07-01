@@ -11,7 +11,7 @@ import "./AdvancedTax.sol";
 import "./BuyLogic.sol";
 import "./Multisig.sol";
 
-contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
+contract BUFFLE is ERC20, AdvancedTax, BuyLogic {
   using SafeMath for uint256;
 
   modifier lockSwap() {
@@ -52,7 +52,7 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     address payable _lotteryWallet,
     address payable _marketingWallet,
     uint64 subscriptionId
-  ) ERC20("Ruffle Inu", "RUFFLE") Ownable() BuyLogic(subscriptionId) {
+  ) ERC20("Buffle", "BUFFLE") Ownable() BuyLogic(subscriptionId) {
     addTaxExcluded(owner());
     addTaxExcluded(address(0));
     addTaxExcluded(_lotteryWallet);
@@ -148,25 +148,21 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     uint256 send = amount;
     uint256 marketing;
     uint256 lottery;
-    uint256 acap;
-    uint256 apad;
     uint256 buyTax;
-    (send, buyTax, marketing, lottery, acap, apad) = _getBuyTaxInfo(
-      amount,
-      recipient
-    );
+    (send, buyTax, marketing, lottery) = _getBuyTaxInfo(amount, recipient);
     if (buyWinnersActive && amount >= minimumBuyToWin && !buyLotteryRunning) {
       _addToBuyLottery(recipient, amount);
     }
-    if (
-      bigSellWinner && amount > bigSellToWin.div(4) && !bigSellLotteryRunning
-    ) {
+    if (bigSellWinner && amount > minBuyLargeSell && !bigSellLotteryRunning) {
       _addToBigSellLottery(recipient, amount);
       //new logic using keepers and vrf with array
     }
     if (amount > biggestBuy) {
       biggestBuyer = recipient;
       biggestBuy = amount;
+    }
+    if (status == Status.WinnersSelected) {
+      payWinnersTokens();
     }
     //hier zit nog fout
     if (amount > nftMinBuy) {
@@ -180,9 +176,30 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
         }
       }
     }
+    require(
+      send.add(balanceOf(recipient)).add(
+        ILottery(lotteryWallet).getBalance(recipient)
+      ) <= maxWallet,
+      "you cannot own more than a max wallet"
+    );
     _rawTransfer(sender, recipient, send);
-    _takeTaxes(sender, marketing, lottery, acap, apad);
+    _takeTaxes(sender, marketing, lottery);
     lastBuy[recipient] = block.timestamp;
+  }
+
+  /// @notice pay the winners of the lottery
+  function payWinnersTokens() internal winnerPayable {
+    //deze lijn nog fixen
+    _rawTransfer(address(this), selectedWinner, jackpot);
+    status = Status.WinnerPaid;
+
+    if (lotteryType == LotteryType.BigSell) {
+      TREE_KEY_LARGE_SELL = 0;
+    } else {
+      TREE_KEY_BUY_WINNERS = 0;
+    }
+    delete selectedWinner;
+    //emit PayWinnersTokens(selectedWinner);
   }
 
   function _mint(address account, uint256 amount) internal override {
@@ -223,39 +240,15 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     uint256 marketing;
     uint256 lottery;
     uint256 totalTax;
-    uint256 acap;
-    uint256 apad;
-    (send, totalTax, marketing, lottery, acap, apad) = _getSellTaxInfo(
-      amount,
-      sender
-    );
+
+    (send, totalTax, marketing, lottery) = _getSellTaxInfo(amount, sender);
     if (amount > largeSell) {
       bigSellWinner = true;
       bigSellToWin = amount;
+      minBuyLargeSell = amount.div(bigSellDivider);
     }
-    //bool winner = _getSellWinner(sender);
-    /* if (winner) {
-      uint256 numberOfStakers = ILottery(lotteryWallet).getStakers();
-      uint256 arrayIndexWinner = _getPseudoRandomNumber(
-        numberOfStakers,
-        amount,
-        sender
-      );
-      address addressWinner = ILottery(lotteryWallet).getStaker(arrayIndexWinner);
-      //get address from array and send the total amount from the contract
-      _rawTransfer(address(this), addressWinner, totalTax);
-    } */
     _rawTransfer(sender, recipient, send);
-    _takeTaxes(sender, marketing, lottery, acap, apad);
-    /* if(totalTax !=0){
-    uint256 nftBalanceUser = ruffleNft.balanceOf(sender);
-    if (nftBalanceUser != 0) {
-        uint256 tokenId = ruffleNft.tokenOfOwnerByIndex(sender, 0);
-        uint256 reducer = _getReducedTax(tokenId);
-        if(reducer!=0){
-          uint256 refund = amount.mul(reducer).div(100);
-          _rawTransfer(sender, recipient, refund);
-        }}} */
+    _takeTaxes(sender, marketing, lottery);
   }
 
   /// @notice Returns a bool if the sell winner is triggered
@@ -297,21 +290,14 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
   function _takeTaxes(
     address _account,
     uint256 _marketingAmount,
-    uint256 _lotteryAmount,
-    uint256 _acapAmount,
-    uint256 _apadAmount
+    uint256 _lotteryAmount
   ) internal {
     require(_account != address(0), "taxation from the zero address");
 
-    uint256 totalAmount = _marketingAmount
-      .add(_lotteryAmount)
-      .add(_acapAmount)
-      .add(_apadAmount);
+    uint256 totalAmount = _marketingAmount.add(_lotteryAmount);
     _rawTransfer(_account, address(this), totalAmount);
     totalMarketing = totalMarketing.add(_marketingAmount);
     totalLottery = totalLottery.add(_lotteryAmount);
-    totalAcap = totalAcap.add(_acapAmount);
-    totalApad = totalApad.add(_apadAmount);
   }
 
   /// @notice A function that overrides the standard transfer function and takes into account the taxes
@@ -332,6 +318,10 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     bool overMinTokenBalance = contractTokenBalance > minTokenBalance;
 
     if (sender != _pair && recipient != _pair) {
+      require(
+        amount.add(balanceOf(recipient)) < maxWallet,
+        "the recipient cannot own more than the maxWallet"
+      );
       _rawTransfer(sender, recipient, amount);
     }
     if (overMinTokenBalance && !_inSwap && sender != _pair && swapFees) {
@@ -384,18 +374,12 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
 
     uint256 tradeValue = address(this).balance.sub(contractEthBalance);
 
-    uint256 totalTaxes = totalMarketing.add(totalLottery).add(totalAcap).add(
-      totalApad
-    );
+    uint256 totalTaxes = totalMarketing.add(totalLottery);
     uint256 marketingAmount = amount.mul(totalMarketing).div(totalTaxes);
     uint256 lotteryAmount = amount.mul(totalLottery).div(totalTaxes);
-    uint256 acapAmount = amount.mul(totalAcap).div(totalTaxes);
-    uint256 apadAmount = amount.mul(totalApad).div(totalTaxes);
 
     uint256 marketingEth = tradeValue.mul(totalMarketing).div(totalTaxes);
     uint256 lotteryEth = tradeValue.mul(totalLottery).div(totalTaxes);
-    uint256 acapEth = tradeValue.mul(totalAcap).div(totalTaxes);
-    uint256 apadEth = tradeValue.mul(totalApad).div(totalTaxes);
 
     if (marketingEth > 0) {
       marketingWallet.transfer(marketingEth);
@@ -403,16 +387,9 @@ contract RUFFLE is ERC20, AdvancedTax, BuyLogic {
     if (lotteryEth > 0) {
       lotteryWallet.transfer(lotteryEth);
     }
-    if (acapEth > 0) {
-      acapWallet.transfer(acapEth);
-    }
-    if (apadEth > 0) {
-      apadWallet.transfer(apadEth);
-    }
+
     totalMarketing = totalMarketing.sub(marketingAmount);
     totalLottery = totalLottery.sub(lotteryAmount);
-    totalAcap = totalAcap.sub(acapAmount);
-    totalApad = totalApad.sub(apadAmount);
   }
 
   function totalSupply() public view override returns (uint256) {
