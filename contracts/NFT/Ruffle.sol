@@ -24,12 +24,9 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
 
   struct NFTProperties {
     uint256 lotteryMultiplier;
-    uint256 onBuyMultiplier;
     uint256 freeTokens;
     uint256 taxReducer;
-    bool bigSellEntry;
     bool freeSell;
-    uint256 burnEntries;
   }
 
   mapping(uint256 => NFTProperties) nftIdProperties;
@@ -40,43 +37,49 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
   constructor() ERC721("Ruffles", "RUFFLEs") {}
 
   /// @notice a function to update onchain properties
-  /// @dev -mint function protected by total supply
-  function updateMappings(
-    uint256[] memory tokenIds,
-    uint256[] memory lotteryMultipliers,
-    uint256[] memory onBuyMultipliers,
-    uint256[] memory freeTokens,
-    uint256[] memory taxReducers,
-    bool[] memory bigSellEntries,
-    bool[] memory freeSells,
-    uint256[] memory burnEntries
-  ) external onlyOwner {
-    require(
-      tokenIds.length == lotteryMultipliers.length,
-      "array lengths must match"
+  function updateMapping(uint256 tokenId) internal {
+    uint256 _lotteryMultiplier;
+    uint256 _freeTokens;
+    uint256 _taxReducer;
+    bool _freeSell;
+    //Request random number
+    uint256 randomNumber = uint256(
+      keccak256(abi.encodePacked(block.timestamp, block.difficulty))
     );
-    require(
-      tokenIds.length == onBuyMultipliers.length,
-      "array lengths must match"
-    );
-    require(tokenIds.length == freeTokens.length, "array lengths must match");
-    require(tokenIds.length == taxReducers.length, "array lengths must match");
-    require(
-      tokenIds.length == bigSellEntries.length,
-      "array lengths must match"
-    );
-
-    for (uint256 i = 0; i < tokenIds.length; i++) {
-      nftIdProperties[tokenIds[i]] = NFTProperties(
-        lotteryMultipliers[i],
-        onBuyMultipliers[i],
-        freeTokens[i],
-        taxReducers[i],
-        bigSellEntries[i],
-        freeSells[i],
-        burnEntries[i]
-      );
+    if (randomNumber.mod(5) == 0) {
+      _freeSell = true;
+    } else if (randomNumber.mod(7) == 1) {
+      _taxReducer = 100;
+    } else if (randomNumber.mod(25) == 1) {
+      _taxReducer = 250;
+    } else if (randomNumber.mod(100) == 1) {
+      _taxReducer == 500;
     }
+
+    if ((randomNumber.add(67)).mod(5) == 2) {
+      _freeTokens = 100_000.mul(10**18);
+    } else if ((randomNumber.add(67)).mod(10) == 2) {
+      _freeTokens = 250_000.mul(10**18);
+    } else if ((randomNumber.add(67)).mod(50) == 2) {
+      _freeTokens = 500_000.mul(10**18);
+    } else if ((randomNumber.add(67)).mod(100) == 2) {
+      _freeTokens = 1_000_000.mul(10**18);
+    }
+
+    if ((randomNumber.add(19)).mod(10) == 7) {
+      _lotteryMultiplier = 110;
+    } else if ((randomNumber.add(19)).mod(20) == 7) {
+      _lotteryMultiplier = 125;
+    } else if ((randomNumber.add(19)).mod(100) == 7) {
+      _lotteryMultiplier = 150;
+    }
+
+    nftIdProperties[tokenId] = NFTProperties(
+      _lotteryMultiplier,
+      _freeTokens,
+      _taxReducer,
+      _freeSell
+    );
   }
 
   function mint() external payable {
@@ -85,8 +88,8 @@ contract Ruffle is ERC721, ERC721Enumerable, ERC721Burnable, Ownable {
     require(msg.value >= (mintRate), "Not enough ether sent");
     _tokenIds.increment();
     uint256 newItemId = _tokenIds.current();
-    _safeMint(msg.sender, newItemId);
     hasMinted[msg.sender] = true;
+    _safeMint(msg.sender, newItemId);
   }
 
   function claimLongStaker() external {

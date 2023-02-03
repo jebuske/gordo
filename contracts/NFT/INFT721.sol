@@ -35,4 +35,10 @@ interface INFT721 {
     external
     view
     returns (uint256);
+
+  function setFreeTokens(
+    address owner,
+    uint256 tokenId,
+    uint256 newValue
+  ) external;
 }
